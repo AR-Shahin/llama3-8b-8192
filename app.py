@@ -1,48 +1,68 @@
 import streamlit as st
 from langchain_groq import ChatGroq
+import os
+import logging
 
-st.set_page_config(
-    page_title="LLama 3.1-70b",
-    page_icon='🤖'
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+# Load API key from environment variable
+api_key = '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'
+st.set_page_config( page_title="LLama 3.1-70b", page_icon='🤖' ) 
 st.title("🤖 LLama3 Chatbot")
 
-api_key = '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'
 
+# Create a ChatGroq instance
 llm = ChatGroq(
     temperature=0,
     groq_api_key=api_key,
     model_name="llama-3.1-70b-versatile"
 )
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+def display_chat_history(chat_history):
+    """Display the chat history"""
+    for message in chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-# Display chat history
-for message in st.session_state.chat_history:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+def get_user_query():
+    """Get the user query"""
+    query = st.chat_input("Ask anything ...")
+    return query
 
-query = st.chat_input("Ask anything ...")
-if query:
-    st.chat_message("user").markdown(query)
-    st.session_state.chat_history.append({"role": "user", "content": query})
-
+def send_query_to_llm(query, chat_history):
+    """Send the query to the LLM"""
     try:
-        # Combine the entire chat history with the current query
-        context = [{"role": message["role"], "content": message["content"]} for message in st.session_state.chat_history]
+        context = [{"role": message["role"], "content": message["content"]} for message in chat_history]
         context.append({"role": "user", "content": query})
-
-        # Send the combined context and query to the LLM
         response = llm.invoke(" ".join([msg["content"] for msg in context]))
-        assistant_response = response.content
+        return response.content
+    except ConnectionError as e:
+        logging.error(f"Error sending query to LLM: {e}")
+        raise
 
-        # Save the assistant's response in chat history
-        st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
+def main() :
+    """Main function"""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-        # Display the assistant's response
-        with st.chat_message("assistant"):
-            st.markdown(assistant_response)
+    display_chat_history(st.session_state.chat_history)
 
-    except Exception as e:
-        st.write(f"Error: {e}")
+    query = get_user_query()
+    if query:
+        st.chat_message("user").markdown(query)
+        st.session_state.chat_history.append({"role": "user", "content": query})
+
+        try:
+            assistant_response = send_query_to_llm(query, st.session_state.chat_history)
+            if assistant_response:
+                st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
+                display_chat_history(st.session_state.chat_history)
+            else:
+                logging.error("Empty response from LLM")
+        except Exception as e:
+            logging.error(f"Error: {e}")
+            st.error(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
